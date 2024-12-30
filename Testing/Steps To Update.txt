@@ -1,0 +1,93 @@
+Baud rate is three bytes, low->middle->high byte, ex: 0x00C201 -> swapped to 0x01C200 = 115200 baud
+
+send data packet:
+0: modbus address
+1: 0x89 (modbus function code)
+2: modbus address
+3: 0x01
+4: 0x01
+5: 0x00
+6: 0x00
+7: 0x00
+8: CRC low
+9: CRC high
+
+---------------Data sequence---------------
+
+(First 7 bytes are echoed from sent data, minus the sent CRC)
+
+RS485 INFO:
+8: Slave Address
+9: Protocol (0x00 = USER, 0x01 = MODBUS_RTU, 0x02 = MODBUS_ASCII, 0x03 = RS485_TO_NET, 0x04 = RTU_TO_TCP)
+10: Device Type (0x00 = I/O DEV, 0x01 = MASTER)
+11: 0x01
+12: Baud rate low byte
+13: Baud rate middle byte
+14: Baud rate high byte
+15: 0x00
+16: Parity (0x04 = none, 0x01 = odd, 0x00 = even)
+17: 0x03
+18: stop bits (0x00 = 1 stop bit, 0x02 = 2 stop bits)
+19: 0x01
+20: Timeout*10ms low byte
+21: Timeout*10ms high byte
+
+IDK:
+22: 0x00
+23: 0x00
+
+RS232 INFO:
+24: Slave Address
+25: Protocol (0x00 = USER, 0x01 = MODBUS_RTU, 0x02 = MODBUS_ASCII)
+26: Device Type (0x00 = I/O DEV, 0x01 = MASTER)
+27: 0x00
+28: Baud rate low byte
+29: Baud rate middle byte
+30: Baud rate high byte
+31: 0x00
+32: Parity (0x04 = none, 0x01 = odd, 0x00 = even)
+33: 0x03
+34: stop bits (0x00 = 1 stop bit, 0x02 = 2 stop bits)
+35: 0x00
+36: Timeout*10ms low byte
+37: Timeout*10ms high byte
+
+
+TCP/IP SETTINGS:
+38: Keepalive*30s
+
+39: 0x00
+
+40: MAC Address Octet 1 (leftmost number)
+41: MAC Address Octet 2
+42: MAC Address Octet 3
+43: MAC Address Octet 4
+44: MAC Address Octet 5
+45: MAC Address Octet 6
+
+46: Device IP Network high byte (192)
+47: Device IP Network middle byte (168)
+48: Device IP Network low byte (1)
+49: Device IP Host address (default 75)
+
+50: Port high byte
+51: Port low byte
+
+52: Netmask Network high byte (255)
+53: Netmask Network middle byte (255)
+54: Netmask Network low byte (255)
+55: Netmask Host byte (0)
+
+56: Gateway Network high byte (192)
+57: Gateway Network middle byte (168)
+58: Gateway Network low byte (1)
+59: Gateway Host address (default 1)
+
+60: 0x01
+61: 0x04
+62: 0x01
+63: 0x00
+
+CRC:
+64: CRC low byte
+65: CRC high byte
