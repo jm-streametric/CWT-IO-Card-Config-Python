@@ -1,6 +1,6 @@
 from typing import Iterable, Literal
 
-_CRC_TABLE = [
+CRC_TABLE = [
     0X0000, 0XC0C1, 0XC181, 0X0140, 0XC301, 0X03C0, 0X0280, 0XC241,
     0XC601, 0X06C0, 0X0780, 0XC741, 0X0500, 0XC5C1, 0XC481, 0X0440,
     0XCC01, 0X0CC0, 0X0D80, 0XCD41, 0X0F00, 0XCFC1, 0XCE81, 0X0E40,
@@ -60,14 +60,14 @@ def intString(byteString: bytes) -> str:
     return fullString
 
 
-def _modbusCRC16(modbusData: Iterable[int]) -> bytes:
+def modbusCRC16(modbusData: Iterable[int]) -> bytes:
     crc = 0xFFFF
     for byte in modbusData:
-        crc = (crc >> 8) ^ _CRC_TABLE[((byte) ^ crc) & 0xFF]
+        crc = (crc >> 8) ^ CRC_TABLE[((byte) ^ crc) & 0xFF]
     return crc.to_bytes(2, "little", signed=False)
 
 
-def _intToBytesCapped(
+def intToBytesCapped(
     lengthBytes: int,
     dataSource: int,
     name: str,
@@ -78,9 +78,15 @@ def _intToBytesCapped(
     except OverflowError:
         maxVal = int(pow(0xFF, lengthBytes))
         print(f"{name} too large or is negative! Capping to the maximum of {maxVal}.")
-        binaryVal = _intToBytesCapped(lengthBytes, maxVal, name)
+        binaryVal = intToBytesCapped(lengthBytes, maxVal, name)
     return binaryVal
 
 
-def _ipStringFromBytes(ipBytes: bytes) -> str:
+def ipStringFromBytes(ipBytes: bytes) -> str:
     return ".".join([str(ipByte) for ipByte in ipBytes])
+
+def ipAddrToBytes(self, ip: str) -> bytes:
+        ipNums = [int(netByte) for netByte in ip.split('.')]
+        if len(ipNums) != 4 or any([(netNum < 0 or netNum > 255) for netNum in ipNums]):
+            raise ValueError(f"IP Address {ip} is invalid!")
+        return bytes(ipNums)
