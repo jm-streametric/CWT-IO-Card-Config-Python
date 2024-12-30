@@ -249,9 +249,3 @@ class CWTCardConfig:
 DEFAULT_RS485_CONFIG = CWTCardConfig.UARTConfig(1, 9600, CWTCardConfig.UARTConfig.Parity.NONE, CWTCardConfig.UARTConfig.StopBits.ONE, CWTCardConfig.UARTConfig.DeviceType.IO_DEVICE, CWTCardConfig.UARTConfig.Protocol.MODBUS_RTU, 1000, 'RS485')
 DEFAULT_RS232_CONFIG = CWTCardConfig.UARTConfig(1, 9600, CWTCardConfig.UARTConfig.Parity.NONE, CWTCardConfig.UARTConfig.StopBits.ONE, CWTCardConfig.UARTConfig.DeviceType.IO_DEVICE, CWTCardConfig.UARTConfig.Protocol.MODBUS_RTU, 1000, 'RS232')
 DEFAULT_TCPIP_CONFIG = CWTCardConfig.TCPConfig(30, bytes([0x00] * 6), "192.168.1.75", 502, "255.255.255.0", "192.168.1.1")
-
-if __name__ == "__main__":
-    settings485, settings232, settingsTCP = CWTCardConfig.readSettings(1, "/dev/ttyUSB0")
-    print(str(settings485) + '\n')
-    print(str(settings232) + '\n')
-    print(str(settingsTCP))
