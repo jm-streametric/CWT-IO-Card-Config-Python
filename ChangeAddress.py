@@ -1,7 +1,7 @@
 from typing import Literal
 from enum import Enum
 import serial
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterable
 from ModTest import hexString
 from textwrap import dedent
@@ -45,7 +45,7 @@ _LONG_RESPONSE_LENGTH = 66
 _SHORT_RESPONSE_LENGTH = 10
 _RS485_SETTINGS_BYTE_INDEX_RANGE = slice(8, 21+1)
 _RS232_SETTINGS_BYTE_INDEX_RANGE = slice(24, 37+1)
-_TCP_SETTINGS_BYTE_INDEX_RANGE = slice(39, 59+1)
+_TCP_SETTINGS_BYTE_INDEX_RANGE = slice(38, 59+1)
 _SERIAL_INFO_LENGTH = _RS485_SETTINGS_BYTE_INDEX_RANGE.stop - _RS485_SETTINGS_BYTE_INDEX_RANGE.start
 _TCP_INFO_LENGTH = _TCP_SETTINGS_BYTE_INDEX_RANGE.stop - _TCP_SETTINGS_BYTE_INDEX_RANGE.start
 
@@ -56,7 +56,6 @@ _RS232_TYPE_ID = bytes((0x00,))
 _RS485_TYPE_ID = bytes((0x01,))
 
 _NUM_KEEP_ALIVE_BYTES = 1
-_NUM_MAC_BYTES = 6
 _NUM_PORT_BYTES = 2
 
 _SERIAL_ADDR_BYTE_INDEX = 0
@@ -69,12 +68,13 @@ _SERIAL_STOP_BITS_BYTE_INDEX = 10
 _SERIAL_TIMEOUT_BYTE_INDEX_RANGE = slice(12,13+1)
 
 _TCP_KEEPALIVE_BYTE_INDEX = 0
-_TCP_MAC_ADDR_BYTE_INDEX_RANGE = slice(1,6+1)
-_TCP_DEVICE_IP_BYTE_INDEX_RANGE = slice(7, 10+1)
-_TCP_PORT_BYTE_INDEX_RANGE = slice(11,12+1)
-_TCP_NETMASK_BYTE_INDEX_RANGE = slice(13, 16+1)
-_TCP_GATEWAY_BYTE_INDEX_RANGE = slice(17,20+1)
+_TCP_MAC_ADDR_BYTE_INDEX_RANGE = slice(2,7+1)
+_TCP_DEVICE_IP_BYTE_INDEX_RANGE = slice(8, 11+1)
+_TCP_PORT_BYTE_INDEX_RANGE = slice(12,13+1)
+_TCP_NETMASK_BYTE_INDEX_RANGE = slice(14, 17+1)
+_TCP_GATEWAY_BYTE_INDEX_RANGE = slice(18,21+1)
 
+SERIAL_TRY_TIMEOUT_S = 5
 
 def _modbusCRC16(modbusData: Iterable[int]) -> bytes:
     crc = 0xFFFF
@@ -83,9 +83,9 @@ def _modbusCRC16(modbusData: Iterable[int]) -> bytes:
     return crc.to_bytes(2, 'little', signed=False)
 
 
-def _intToBytesCapped(lengthBytes: int, dataSource: int, name: str) -> bytes:
+def _intToBytesCapped(lengthBytes: int, dataSource: int, name: str, endianness: Literal['little', 'big'] = 'little') -> bytes:
         try:
-            binaryVal = dataSource.to_bytes(lengthBytes, 'little', signed=False)
+            binaryVal = dataSource.to_bytes(lengthBytes, endianness, signed=False)
         except OverflowError:
             maxVal = int(pow(0xFF, lengthBytes))
             print(f"{name} too large or is negative! Capping to the maximum of {maxVal}.")
@@ -216,7 +216,7 @@ class CWTCardConfig:
         
         def getData(self) -> bytes:
             bKeepAlive = _intToBytesCapped(_NUM_KEEP_ALIVE_BYTES, int(self.keepAliveSecs / 30), "Keep Alive")
-            bPort = _intToBytesCapped(_NUM_PORT_BYTES, self.port, "Port")
+            bPort = _intToBytesCapped(_NUM_PORT_BYTES, self.port, "Port", endianness='big')
             bDevIP = self.parseIP(self.deviceIP)
             bNetmask = self.parseIP(self.netmask)
             bGateway = self.parseIP(self.gatewayIP)
@@ -261,7 +261,7 @@ class CWTCardConfig:
 
     @staticmethod
     def _sendBytesToIOCard(data: bytes, responseLength: int, serialPort: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> bytes:
-        with serial.Serial(serialPort, baudrate, 8, parity, stopbits) as ioCardConnection:
+        with serial.Serial(serialPort, baudrate, 8, parity, stopbits, timeout=SERIAL_TRY_TIMEOUT_S) as ioCardConnection:
             ioCardConnection.write(data)
             response = ioCardConnection.read(responseLength)
         return response
@@ -297,16 +297,12 @@ class CWTCardConfig:
         return writeResponse == expectedResponse
 
     @staticmethod
-    def readSettings(deviceModbusAddress: int, serialPort: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> bytes: 
-        return CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPort, baudrate, parity, stopbits)
-    
+    def readSettings(deviceModbusAddress: int, serialPort: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> tuple[UARTConfig, UARTConfig, TCPConfig]: 
+        bytesBack = CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPort, baudrate, parity, stopbits)
+        return CWTCardConfig._parseReply(bytesBack)
 
 if __name__ == "__main__":
-    ret = CWTCardConfig.readSettings(2, "/dev/ttyUSB0")
-    settings485, settings232, settingsTCP = CWTCardConfig._parseReply(ret)
+    settings485, settings232, settingsTCP = CWTCardConfig.readSettings(254, "/dev/ttyUSB0")
     print(str(settings485) + '\n')
     print(str(settings232) + '\n')
     print(str(settingsTCP))
-
-    ret2 = CWTCardConfig.writeSettings(settings485, settings232, settingsTCP, 2, "/dev/ttyUSB0")
-    print(ret2)
