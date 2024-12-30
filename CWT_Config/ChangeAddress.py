@@ -1,9 +1,10 @@
 from typing import Literal
 from enum import Enum
-import serial
+import serial, socket
 from dataclasses import dataclass
 from Utils import hexString, _intToBytesCapped, _ipStringFromBytes, _modbusCRC16
 from textwrap import dedent
+import re
 
 _LONG_RESPONSE_LENGTH = 66
 _SHORT_RESPONSE_LENGTH = 10
@@ -204,10 +205,21 @@ class CWTCardConfig:
         )
 
     @staticmethod
-    def _sendBytesToIOCard(data: bytes, responseLength: int, serialPort: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> bytes:
-        with serial.Serial(serialPort, baudrate, 8, parity, stopbits, timeout=SERIAL_TRY_TIMEOUT_S) as ioCardConnection:
-            ioCardConnection.write(data)
-            response = ioCardConnection.read(responseLength)
+    def _sendBytesToIOCard(data: bytes, responseLength: int, serialPortOrIPAddress: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> bytes:
+        
+        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}$", serialPortOrIPAddress) is not None: #Just look sorta like an IP address and we'll try a socket connection
+            socketAddr = (serialPortOrIPAddress.split(':')[0], int(serialPortOrIPAddress.split(':')[1]))
+            sockUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sockUDP.settimeout(float(SERIAL_TRY_TIMEOUT_S))
+            sockUDP.connect_ex(socketAddr)
+            numBytesSent = sockUDP.send(data)
+            if numBytesSent != len(data):
+                raise ValueError(f"Tried to send {len(data)} bytes but actually sent {numBytesSent} to the IP Address {serialPortOrIPAddress}")
+            response = sockUDP.recvfrom(responseLength)[0]
+        else:
+            with serial.Serial(serialPortOrIPAddress, baudrate, 8, parity, stopbits, timeout=SERIAL_TRY_TIMEOUT_S) as ioCardConnection:
+                ioCardConnection.write(data)
+                response = ioCardConnection.read(responseLength)
         return response
 
     @staticmethod
@@ -226,24 +238,24 @@ class CWTCardConfig:
         return payload + _modbusCRC16(payload)
 
     @staticmethod
-    def writeSettings(config485: UARTConfig, config232: UARTConfig, configTCP: TCPConfig, deviceModbusAddress: int, serialPort: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1, allowMACChanges: bool = False) -> bool: 
+    def writeSettings(config485: UARTConfig, config232: UARTConfig, configTCP: TCPConfig, deviceModbusAddress: int, serialPortOrIPAddress: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1, allowMACChanges: bool = False) -> bool: 
         config485.serialType = "RS485"
         config232.serialType = "RS232"
 
         if not allowMACChanges:
-            readResponse = CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPort, baudrate, parity, stopbits)
+            readResponse = CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPortOrIPAddress, baudrate, parity, stopbits)
             readTCP = CWTCardConfig._parseReply(readResponse)[2]
             configTCP.macAddress = readTCP.macAddress
 
         configUpdatePayload = CWTCardConfig._getConfigWritePayload(deviceModbusAddress, config485.getData(), config232.getData(), configTCP.getData())
         expectedResponse = configUpdatePayload[:8] + _modbusCRC16(configUpdatePayload[:8])
         
-        writeResponse = CWTCardConfig._sendBytesToIOCard(configUpdatePayload, _SHORT_RESPONSE_LENGTH, serialPort, baudrate, parity, stopbits)
+        writeResponse = CWTCardConfig._sendBytesToIOCard(configUpdatePayload, _SHORT_RESPONSE_LENGTH, serialPortOrIPAddress, baudrate, parity, stopbits)
         return writeResponse == expectedResponse
 
     @staticmethod
-    def readSettings(deviceModbusAddress: int, serialPort: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> tuple[UARTConfig, UARTConfig, TCPConfig]: 
-        bytesBack = CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPort, baudrate, parity, stopbits)
+    def readSettings(deviceModbusAddress: int, serialPortOrIPAddress: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> tuple[UARTConfig, UARTConfig, TCPConfig]: 
+        bytesBack = CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPortOrIPAddress, baudrate, parity, stopbits)
         return CWTCardConfig._parseReply(bytesBack)
 
 DEFAULT_RS485_CONFIG = CWTCardConfig.UARTConfig(1, 9600, CWTCardConfig.UARTConfig.Parity.NONE, CWTCardConfig.UARTConfig.StopBits.ONE, CWTCardConfig.UARTConfig.DeviceType.IO_DEVICE, CWTCardConfig.UARTConfig.Protocol.MODBUS_RTU, 1000, 'RS485')
