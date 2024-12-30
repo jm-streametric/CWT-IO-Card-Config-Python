@@ -5,7 +5,7 @@ send data packet:
 1: 0x89 (modbus function code)
 2: modbus address
 3: 0x01
-4: 0x01
+4: Write Type (0x01 = Read config, 0x02 = Write config)
 5: 0x00
 6: 0x00
 7: 0x00

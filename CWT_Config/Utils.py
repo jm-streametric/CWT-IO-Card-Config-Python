@@ -1,4 +1,8 @@
 from typing import Iterable, Literal
+import re, serial, socket
+
+MODIFY_SETTINGS_FUNCTION_CODE = bytes((0x89,))
+SERIAL_TRY_TIMEOUT_S = 5
 
 CRC_TABLE = [
     0X0000, 0XC0C1, 0XC181, 0X0140, 0XC301, 0X03C0, 0X0280, 0XC241,
@@ -90,3 +94,38 @@ def ipAddrToBytes(self, ip: str) -> bytes:
         if len(ipNums) != 4 or any([(netNum < 0 or netNum > 255) for netNum in ipNums]):
             raise ValueError(f"IP Address {ip} is invalid!")
         return bytes(ipNums)
+
+def sendBytesToIOCard(data: bytes, responseLength: int, serialPortOrIPAddress: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> bytes:
+    """Send a byte string to the CWT IO Card over serial or UDP (selected automatically)
+
+    Arguments:
+        data -- Byte string to send to the CWT IO Card
+        responseLength -- Expected length of response from the CWT IO Card
+        serialPortOrIPAddress -- If sending over RS232 or RS485, this is the computer serial port where the CWT IO Card is connected, e.g. '/dev/ttyUSB0' or 'COM5'.
+        If sending over UDP, this is ip address:port to reach the CWT card at, e.g. '192.168.1.75:502'
+
+    Keyword Arguments:
+        baudrate -- RS232/RS485 baudrate. Ignored if sending over UDP (default: 9600)
+        parity -- RS232/RS485 parity. Ignored if sending over UDP (default: serial.PARITY_NONE)
+        stopbits -- RS232/RS485 stop bit(s). Ignored if sending over UDP (default: 1)
+
+    Raises:
+        ConnectionError: If sending over UDP and the full data payload was unable to be sent
+
+    Returns:
+        CWT IO Card's response byte string
+    """
+    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5}$", serialPortOrIPAddress) is not None: #Just look sorta like an IP address and we'll try a socket connection
+        socketAddr = (serialPortOrIPAddress.split(':')[0], int(serialPortOrIPAddress.split(':')[1]))
+        sockUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sockUDP.settimeout(float(SERIAL_TRY_TIMEOUT_S))
+        sockUDP.connect_ex(socketAddr)
+        numBytesSent = sockUDP.send(data)
+        if numBytesSent != len(data):
+            raise ConnectionError(f"Tried to send {len(data)} bytes but actually sent {numBytesSent} to the IP Address {serialPortOrIPAddress}")
+        response = sockUDP.recvfrom(responseLength)[0]
+    else:
+        with serial.Serial(serialPortOrIPAddress, baudrate, 8, parity, stopbits, timeout=SERIAL_TRY_TIMEOUT_S) as ioCardConnection:
+            ioCardConnection.write(data)
+            response = ioCardConnection.read(responseLength)
+    return response

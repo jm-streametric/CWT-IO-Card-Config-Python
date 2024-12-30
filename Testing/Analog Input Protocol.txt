@@ -1,0 +1,41 @@
+Send data packet:
+0: modbus address
+1: 0x89 (modbus function code)
+2: modbus address
+3: 0xA1
+4: write type (0x03 = Read settings, 0x04 = Write settings)
+5: 0x00
+6: IO Block selection (0x00 = AI0-15, 0x10 = AI16-31)
+7: 0x00
+8: CRC low
+9: CRC high
+
+Read:
+(Bytes 0-7 are echoed from sent data packet)
+
+Each block of 16 bytes contains data for each analog input.  Byte indexes are:
+0: L low
+1: L high
+2: H low
+3: H high
+4: 4mA low
+5: 4mA high
+6: 20mA low
+7: 20mA high
+
+8: 1V low
+9: 1V high
+10: 5V low
+11: 5V high
+12: 10V low
+13: 10V high
+14: Type (see below)
+15: Time
+
+Type byte:
+0x00 - 4-20mA_L_0mA
+0x01 - 0-20mA
+0x02 - 0-5V
+0x03 - 1-5V
+0x04 - 0-10V
+0x05 - 4-20mA_L_4mA
