@@ -158,7 +158,8 @@ class CWTCardConfig:
             return bytes(ipNums)
         
         def getData(self) -> bytes:
-            bKeepAlive = _intToBytesCapped(_NUM_KEEP_ALIVE_BYTES, int(self.keepAliveSecs / 30), "Keep Alive")
+            roundedKeepAlive = round(self.keepAliveSecs / 30, ndigits=None)
+            bKeepAlive = _intToBytesCapped(_NUM_KEEP_ALIVE_BYTES, roundedKeepAlive, "Keep Alive")
             bPort = _intToBytesCapped(_NUM_PORT_BYTES, self.port, "Port", endianness='big')
             bDevIP = self.parseIP(self.deviceIP)
             bNetmask = self.parseIP(self.netmask)
@@ -225,13 +226,14 @@ class CWTCardConfig:
         return payload + _modbusCRC16(payload)
 
     @staticmethod
-    def writeSettings(config485: UARTConfig, config232: UARTConfig, configTCP: TCPConfig, deviceModbusAddress: int, serialPort: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1) -> bool: 
+    def writeSettings(config485: UARTConfig, config232: UARTConfig, configTCP: TCPConfig, deviceModbusAddress: int, serialPort: str, baudrate: int = 9600, parity: str = serial.PARITY_NONE, stopbits: Literal[1,2] = 1, allowMACChanges: bool = False) -> bool: 
         config485.serialType = "RS485"
         config232.serialType = "RS232"
 
-        readResponse = CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPort, baudrate, parity, stopbits)
-        readTCP = CWTCardConfig._parseReply(readResponse)[2]
-        configTCP.macAddress = readTCP.macAddress
+        if not allowMACChanges:
+            readResponse = CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPort, baudrate, parity, stopbits)
+            readTCP = CWTCardConfig._parseReply(readResponse)[2]
+            configTCP.macAddress = readTCP.macAddress
 
         configUpdatePayload = CWTCardConfig._getConfigWritePayload(deviceModbusAddress, config485.getData(), config232.getData(), configTCP.getData())
         expectedResponse = configUpdatePayload[:8] + _modbusCRC16(configUpdatePayload[:8])
@@ -244,8 +246,12 @@ class CWTCardConfig:
         bytesBack = CWTCardConfig._sendBytesToIOCard(CWTCardConfig._getConfigRequestPayload(deviceModbusAddress), _LONG_RESPONSE_LENGTH, serialPort, baudrate, parity, stopbits)
         return CWTCardConfig._parseReply(bytesBack)
 
+DEFAULT_RS485_CONFIG = CWTCardConfig.UARTConfig(1, 9600, CWTCardConfig.UARTConfig.Parity.NONE, CWTCardConfig.UARTConfig.StopBits.ONE, CWTCardConfig.UARTConfig.DeviceType.IO_DEVICE, CWTCardConfig.UARTConfig.Protocol.MODBUS_RTU, 1000, 'RS485')
+DEFAULT_RS232_CONFIG = CWTCardConfig.UARTConfig(1, 9600, CWTCardConfig.UARTConfig.Parity.NONE, CWTCardConfig.UARTConfig.StopBits.ONE, CWTCardConfig.UARTConfig.DeviceType.IO_DEVICE, CWTCardConfig.UARTConfig.Protocol.MODBUS_RTU, 1000, 'RS232')
+DEFAULT_TCPIP_CONFIG = CWTCardConfig.TCPConfig(30, bytes([0x00] * 6), "192.168.1.75", 502, "255.255.255.0", "192.168.1.1")
+
 if __name__ == "__main__":
-    settings485, settings232, settingsTCP = CWTCardConfig.readSettings(254, "/dev/ttyUSB0")
+    settings485, settings232, settingsTCP = CWTCardConfig.readSettings(1, "/dev/ttyUSB0")
     print(str(settings485) + '\n')
     print(str(settings232) + '\n')
     print(str(settingsTCP))
